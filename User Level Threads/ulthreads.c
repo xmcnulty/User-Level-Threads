@@ -12,13 +12,19 @@
 
 // Execution state (machine context) data structure
 typedef struct xstate_st {
-    void (*main) (void *);
+    void (*main) (void *); // function to be execute by the thread
+	void *main_arg; // arguments to passed to the main function
+	void *stack; // stack utilized by the thread
+	size_t stack_size; // size of the stack
+	
+	int setjmp_ret; // return value of set_jmp
+	
     jmp_buf jb;
 } xstate_t;
 
 /* Execution state control functions: save, restore, switch. */
-void xstate_save(xstate_t *xstate);
-void xstate_restore(xstate_t *xstate);
+#define xstate_save(xstate) xstate->setjmp_ret = setjmp(xstate->jb)
+#define xstate_restore(xstate) longjmp(xstate->jb, xstate->setjmp_ret)
 void xstate_switch(xstate_t *xstate);
 
 /* main is pointer to a possible argument to the main function.
