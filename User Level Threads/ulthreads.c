@@ -12,6 +12,7 @@
 
 // Execution state (machine context) data structure
 typedef struct xstate_st {
+    void (*main) (void *);
     jmp_buf jb;
 } xstate_t;
 
