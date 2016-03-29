@@ -25,6 +25,7 @@
 /* Begin PBXFileReference section */
 		25162EE21CA45CB4003F9C15 /* User Level Threads */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "User Level Threads"; sourceTree = BUILT_PRODUCTS_DIR; };
 		25162EE51CA45CB4003F9C15 /* ulthreads.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ulthreads.c; sourceTree = "<group>"; };
+		252B23901CA5932700BFC865 /* Test_File */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = Test_File; path = ../Test_File; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -57,6 +58,7 @@
 		25162EE41CA45CB4003F9C15 /* User Level Threads */ = {
 			isa = PBXGroup;
 			children = (
+				252B23901CA5932700BFC865 /* Test_File */,
 				25162EE51CA45CB4003F9C15 /* ulthreads.c */,
 			);
 			path = "User Level Threads";
