@@ -11,6 +11,7 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 // Execution state (machine context) data structure
 typedef struct xstate_st {
@@ -47,6 +48,8 @@ void xstate_create(xstate_t *xstate, void (*main) (void *), void *main_arg, void
 void xstate_capture_stack(int sig) {
     printf("in xstate_capture_stack: %d\n", sig);
     fflush(stdout);
+    
+    exit(0);
 }
 
 /* Start the newly create thread by making a call to the main function of the thread. */
@@ -66,6 +69,7 @@ void *state1_stack;
 
 int num = 3; // global parameter for xstate_boot
 
+/* Main function, used for testing. */
 int main(int argc, char ** argv) {
     /* create the stack for state1 */
     state1_stack = (void*) malloc(MINSIGSTKSZ);
@@ -74,28 +78,30 @@ int main(int argc, char ** argv) {
         signal is to be processed. */
     stack_t state1_ss = {
         .ss_size = MINSIGSTKSZ,
-        .ss_sp = state1_stack
+        .ss_sp = state1_stack,
     };
     
     /* Specifies xstate_capture_stack as the alternal handler function to be called when
         a signal is processed. */
     struct sigaction state1_sa = {
         .sa_handler = &xstate_capture_stack,
-        .sa_flags = SA_ONSTACK
+        .sa_flags = SA_ONSTACK,
     };
     
-    /* set state1_stack as the alternate stack used for signal processing. */
+    /* set up the alternate stack and signal action */
     sigaltstack(&state1_ss, 0);
+    sigfillset(&state1_sa.sa_mask);
+    sigaction(SIGUSR1, &state1_sa, 0);
     
-
-    /* set the signal mask for state1_sa */
-    sigemptyset(&state1_sa.sa_mask);
+    /* create a sigset that contains SIGUSR1 and set its mask to blocked. */
+    sigset_t usr1_set, old_set;
+    sigemptyset(&usr1_set);
+    sigemptyset(&old_set);
+    sigaddset(&usr1_set, SIGUSR1);
     
-    /* set state1_sa as the signal action for SIGUSR1 */
-    if (sigaction(SIGUSR1, &state1_sa, 0) == -1) {
-        fprintf(stderr, "error with sigaction.\n");
-        exit(-1);
-    }
+    // here we create the mask and signal SIGUSR1
+    
+    sigprocmask(SIG_BLOCK, &usr1_set, &old_set);
     
     kill(0, SIGUSR1);
 }
