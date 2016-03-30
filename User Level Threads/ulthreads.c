@@ -80,29 +80,22 @@ int main(int argc, char ** argv) {
     /* Specifies xstate_capture_stack as the alternal handler function to be called when
         a signal is processed. */
     struct sigaction state1_sa = {
-        .sa_handler = xstate_capture_stack,
+        .sa_handler = &xstate_capture_stack,
         .sa_flags = SA_ONSTACK
     };
     
     /* set state1_stack as the alternate stack used for signal processing. */
     sigaltstack(&state1_ss, 0);
     
-    /* set the sigaction that calls xstate_capture_stack as the function to
-       process a signal. */
-    sigaction(SIGUSR1, &state1_sa, 0);
+
+    /* set the signal mask for state1_sa */
+    sigemptyset(&state1_sa.sa_mask);
     
-    /* Creates signal sets, one for the SIGUSR1 with the overriden sig_action
-       and anotherone containing the old signal state */
-    sigset_t usr1_set, oldset;
+    /* set state1_sa as the signal action for SIGUSR1 */
+    if (sigaction(SIGUSR1, &state1_sa, 0) == -1) {
+        fprintf(stderr, "error with sigaction.\n");
+        exit(-1);
+    }
     
-    /* fill oldset with the current signal set */
-    sigfillset(&oldset);
-    
-    sigemptyset(&usr1_set); // empty the usr1 signal set
-    sigaddset(&usr1_set, SIGUSR1); // add SIGUSR1 ot usr_set
-  
-    sigprocmask(SIG_BLOCK, &usr1_set, &oldset);
     kill(0, SIGUSR1);
-    kill(0, SIGUSR1);
-    sigprocmask(SIG_UNBLOCK, &usr1_set, &oldset);
 }
