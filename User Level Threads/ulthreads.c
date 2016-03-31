@@ -107,8 +107,13 @@ int main(int argc, char ** argv) {
     /* create the xstate state1 */
     xstate_create(state1, (void (*) (void *)) &test, (void*) &num, state1_stack, MINSIGSTKSZ);
     
-    sigfillset(&sa.sa_mask);
+    /* set the signal stack */
+    sigaltstack(&ss, 0);
+    
+    /* add sigusr1 to sa's mask */
+    sigemptyset(&sa.sa_mask);
     sigaddset(&sa.sa_mask, SIGUSR1);
+    sigaction(SIGUSR1, &sa, 0);
     
     sigset_t oldset; // old signal set, (without SIGUSR1)
     
