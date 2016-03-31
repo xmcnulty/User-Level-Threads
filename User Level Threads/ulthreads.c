@@ -103,5 +103,7 @@ int main(int argc, char ** argv) {
     
     sigprocmask(SIG_BLOCK, &usr1_set, &old_set);
     
-    kill(0, SIGUSR1);
+    kill(getpid(), SIGUSR1);
+	
+	sigprocmask(SIG_UNBLOCK, &usr1_set, 0);
 }
