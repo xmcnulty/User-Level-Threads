@@ -62,6 +62,20 @@ void test (int n) {
     }
 }
 
+
+/* Specifies state1_stack as the alternate stack on which the SIGUSR1
+ signal is to be processed. */
+stack_t ss = {
+    .ss_size = MINSIGSTKSZ,
+};
+
+/* Specifies xstate_capture_stack as the alternal handler function to be called when
+ a signal is processed. */
+struct sigaction sa = {
+    .sa_handler = &xstate_capture_stack,
+    .sa_flags = SA_ONSTACK,
+};
+
 // global instance of xstate_t objects. Used for testing.
 xstate_t *state1;
 
@@ -75,19 +89,8 @@ int main(int argc, char ** argv) {
     /* create the stack for state1 */
     state1_stack = (void*) malloc(MINSIGSTKSZ);
     
-    /* Specifies state1_stack as the alternate stack on which the SIGUSR1
-        signal is to be processed. */
-    stack_t ss = {
-        .ss_size = MINSIGSTKSZ,
-        .ss_sp = state1_stack,
-    };
-    
-    /* Specifies xstate_capture_stack as the alternal handler function to be called when
-        a signal is processed. */
-    struct sigaction sa = {
-        .sa_handler = &xstate_capture_stack,
-        .sa_flags = SA_ONSTACK,
-    };
+    // set ss to the newly allocated state1_stack
+    ss.ss_sp = state1_stack;
     
     /* set up the alternate stack and signal action */
     sigaltstack(&ss, 0);
