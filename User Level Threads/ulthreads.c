@@ -17,17 +17,14 @@
 typedef struct xstate_t {
     jmp_buf jb; // jmp_buf used for context switching
     
-    void (*func) (void*); // function called by xstate
-    void *args; // arguments for func
+    /* function and argument for xstate */
+    void (*func) (void*);
+    void *arg;
     
 } xstate_t;
 
-/* Specifies state1_stack as the alternate stack on which the SIGUSR1
- signal is to be processed. */
-stack_t ss;
-
 // global instance of xstate_t objects. Used for testing.
-xstate_t *state1, *main_state;
+xstate_t *state1;
 
 // global starting address for state1 stack
 void *state1_stack;
@@ -41,19 +38,6 @@ int num = 10; // global parameter for test function
     if (setjmp(old_xstate->jb) == 0) \
         longjmp(new_xstate->jb, 1)
 
-/* main is pointer to a possible argument to the main function.
-   main_arg is a pointer to a possible argument to the main function.
-   stack is the memory buffer set aside for the thread stack.
-   stack_size is the size in bytes of the stack */
-void xstate_create(xstate_t *xstate, void (*main) (void *), void *main_arg, void *stack, size_t stack_size) {
-    /* sets values of ss to create the stack when the user signal is handled */
-    ss.ss_size = stack_size;
-    ss.ss_sp = stack;
-    ss.ss_flags = 0;
-
-    xstate->func = main;
-    xstate->args = main_arg;
-}
 
 /* Private signal handler function that will be called with a signal stack.
    The execution state will be saved before returning from the handler. 
@@ -66,6 +50,60 @@ void xstate_capture_stack(int sig) {
     
     printf("in xstate_capture_stack: %d\n", sig);
     fflush(stdout);
+    
+    return;
+}
+
+/* main is pointer to a possible argument to the main function.
+   main_arg is a pointer to a possible argument to the main function.
+   stack is the memory buffer set aside for the thread stack.
+   stack_size is the size in bytes of the stack */
+void xstate_create(xstate_t *xstate, void (*main) (void *), void *main_arg, void *stack, size_t stack_size) {
+	/* set the xstate's function and argument */
+	xstate->func = main;
+	xstate->arg = main_arg;
+	
+	/* specifies alternate signal stack to be used as part of an execution state */
+	stack_t ss = {
+		.ss_size = stack_size,
+		.ss_sp = stack,
+		.ss_flags = 0,
+	};
+	
+	/* specifies alternate signal stack action function */
+	struct sigaction sa = {
+		.sa_handler = xstate_capture_stack,
+		.sa_flags = SA_ONSTACK,
+	};
+	
+	/* set the alternate signal stack and alternate signal handler */
+	stack_t old_stack; // old signal stack used for restoration.
+	struct sigaction old_action; // old sigaction used for restoration.
+	
+	if (sigaltstack(&ss, &old_stack) == -1) { perror("sigaltstack\n"); exit(-1); }
+	if (sigfillset(&sa.sa_mask) == -1) { perror("sigfillset\n"); exit(-1); }
+	if (sigaction(SIGUSR1, &sa, &old_action) == -1) { perror("sigaction\n"); exit(-1); }
+	
+	/* mask for SIGUSR1 and old mask used for restoration */
+	sigset_t mask, oldmask;
+	
+	// put SIGUSR1 in mask
+	if (sigemptyset (&mask) == -1) { perror("sigemptyset\n"); exit(-1); }
+	if (sigaddset (&mask, SIGUSR1) == -1) { perror("sigaddset\n"); exit(-1); }
+	
+	// block mask and save the old mask
+	if (sigprocmask(SIG_BLOCK, &mask, &oldmask) == -1) { perror("SIG_BLOCK\n"); exit(-1); }
+	
+	kill (getpid(), SIGUSR1); // hopefully goes into the alternate signal handler
+	
+	// unblock SIGUSR1
+	if (sigprocmask(SIG_UNBLOCK, &mask, 0) == -1) { perror("SIG_UNBLOCK\n"); exit(-1); }
+	
+	// restore the old signal stack and handler.
+	if (sigaltstack(&old_stack, 0) == -1) { perror("restoring old_stack\n"); exit(-1); }
+	if (sigaction(SIGUSR1, &old_action, 0) == -1) { perror("restoring old_action\n"); exit(-1); }
+	
+	xstate_restore(xstate);
 }
 
 /* Start the newly create thread by making a call to the main function of the thread. */
@@ -75,7 +113,7 @@ void xstate_boot(void) {
 	
 	xstate_restore(state1);
 	
-    ((void (*) (int))state1->func) (*((int *) state1->args));
+    ((void (*) (int))state1->func) (*((int *) state1->arg));
 }
 
 /* test function */
@@ -84,79 +122,17 @@ void test (int n) {
     
     for (i=0; i < n; i++) {
         printf("%d\n", i);
-        
-        if (i == 5) {
-			xstate_switch(state1, main_state);
-		}
     }
 }
-
-/* Specifies xstate_capture_stack as the alternal handler function to be called when
- a signal is processed. */
-struct sigaction sa = {
-    .sa_handler = xstate_capture_stack,
-    .sa_flags = SA_ONSTACK,
-};
 
 /* Main function, used for testing. */
 int main(int argc, char ** argv) {
     /* allocate space for the state1 stack */
     state1_stack = (void*) calloc(SIGSTKSZ, sizeof(void));
     
+    /** allocate space for state1 */
     state1 = (xstate_t*) malloc(sizeof(xstate_t));
     
     /* create the xstate state1 */
     xstate_create(state1, (void (*) (void *)) &test, (void*) &num, state1_stack, SIGSTKSZ);
-    
-    /* set the signal stack */
-    if (sigaltstack(&ss, 0) == -1) {
-		perror("sigaltstack(ss, 0)\n");
-		exit(-1);
-	}
-    
-    /* add sigusr1 to sa's mask */
-    if (sigfillset(&sa.sa_mask) == -1) {
-		perror("sigfillset(sa.sa_mask)\n");
-		exit(-1);
-	}
-	
-    if (sigaction(SIGUSR1, &sa, 0) == -1) {
-		perror("sigaction(SIGUSR1, sa)\n");
-		exit(-1);
-	}
-    
-    sigset_t mask, oldmask; // old signal set, (without SIGUSR1)
-    
-    if (sigemptyset(&mask) == -1) {
-		perror("sigemptyset(mask)\n");
-		exit(-1);
-	}
-	
-    if (sigaddset(&mask, SIGUSR1) == -1) {
-		perror("sigaddset(mask, SIGUSR1)\n");
-		exit(-1);
-	}
-    
-    if (sigprocmask(SIG_BLOCK, &mask, &oldmask)) {
-		perror("sigprocmask(SIG_BLOCK, &mask, &oldmask\n");
-		exit(-1);
-	}
-    
-    if (kill(getpid(), SIGUSR1) == 1) {
-		perror("kill\n");
-		exit(-1);
-	}
-    
-    if (sigprocmask(SIG_UNBLOCK, &mask, 0) == -1) {
-		perror("sigprocmask(SIG_UNBLOCK, &mask, 0)\n");
-		exit(-1);
-	}
-	
-	// xstate for the main thread
-	main_state = (xstate_t*) malloc(sizeof(xstate_t));
-	xstate_save(main_state);
-	
-	xstate_boot();
-	
-	printf("in main\n");
 }
