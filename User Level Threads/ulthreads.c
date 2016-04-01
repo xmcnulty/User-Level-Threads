@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+void xstate_boot(void);
+
 // Execution state (machine context) data structure
 typedef struct xstate_t {
     jmp_buf jb; // jmp_buf used for context switching
@@ -24,7 +26,7 @@ typedef struct xstate_t {
 } xstate_t;
 
 // global instance of xstate_t objects. Used for testing.
-xstate_t *state1;
+xstate_t *state1, *create_state;
 
 // global starting address for state1 stack
 void *state1_stack;
@@ -46,12 +48,10 @@ int num = 10; // global parameter for test function
    with the alternative stack in place and the function xstate_boot will
    be called */
 void xstate_capture_stack(int sig) {
-    xstate_save(state1);
-    
-    printf("in xstate_capture_stack: %d\n", sig);
-    fflush(stdout);
-    
-    return;
+	if (xstate_save(state1) == 0)
+		return;
+	else
+		xstate_boot();
 }
 
 /* main is pointer to a possible argument to the main function.
@@ -103,16 +103,16 @@ void xstate_create(xstate_t *xstate, void (*main) (void *), void *main_arg, void
 	if (sigaltstack(&old_stack, 0) == -1) { perror("restoring old_stack\n"); exit(-1); }
 	if (sigaction(SIGUSR1, &old_action, 0) == -1) { perror("restoring old_action\n"); exit(-1); }
 	
-	xstate_restore(xstate);
+		/* save the current state before going into the signal handler */
+	xstate_t *create_state = (xstate_t *) malloc(sizeof(xstate_t));
+	
+	xstate_save(create_state);
+	xstate_restore(state1);
 }
 
 /* Start the newly create thread by making a call to the main function of the thread. */
 /* this test function squares a number and prints the result. */
 void xstate_boot(void) {
-	printf("boot\n");
-	
-	xstate_restore(state1);
-	
     ((void (*) (int))state1->func) (*((int *) state1->arg));
 }
 
@@ -135,4 +135,6 @@ int main(int argc, char ** argv) {
     
     /* create the xstate state1 */
     xstate_create(state1, (void (*) (void *)) &test, (void*) &num, state1_stack, SIGSTKSZ);
+    
+    //xstate_switch(create_state, state1);
 }
