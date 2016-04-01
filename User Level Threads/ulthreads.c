@@ -101,19 +101,16 @@ void xstate_create(xstate_t *xstate, void (*main) (void *), void *main_arg, void
 	
 	// restore the old signal stack and handler.
 	if (sigaltstack(&old_stack, 0) == -1) { perror("restoring old_stack\n"); exit(-1); }
-	if (sigaction(SIGUSR1, &old_action, 0) == -1) { perror("restoring old_action\n"); exit(-1); }
-	
-		/* save the current state before going into the signal handler */
-	xstate_t *create_state = (xstate_t *) malloc(sizeof(xstate_t));
-	
-	xstate_save(create_state);
-	xstate_restore(state1);
 }
 
 /* Start the newly create thread by making a call to the main function of the thread. */
 /* this test function squares a number and prints the result. */
 void xstate_boot(void) {
     ((void (*) (int))state1->func) (*((int *) state1->arg));
+    
+    /* return to the calling application */
+    xstate_t *boot_state = (xstate_t*) malloc(sizeof(xstate_t));
+    xstate_switch(boot_state, create_state);
 }
 
 /* test function */
@@ -130,11 +127,15 @@ int main(int argc, char ** argv) {
     /* allocate space for the state1 stack */
     state1_stack = (void*) calloc(SIGSTKSZ, sizeof(void));
     
-    /** allocate space for state1 */
+    /*s allocate space for state1 */
     state1 = (xstate_t*) malloc(sizeof(xstate_t));
     
     /* create the xstate state1 */
     xstate_create(state1, (void (*) (void *)) &test, (void*) &num, state1_stack, SIGSTKSZ);
     
-    //xstate_switch(create_state, state1);
+    /* state at the time of creation */
+    create_state = (xstate_t *) malloc(sizeof(xstate_t));
+    
+    /* switch to the thread state */
+    xstate_switch(create_state, state1);
 }
